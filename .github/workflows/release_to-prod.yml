@@ -120,7 +120,7 @@ jobs:
       #     depid: ${{steps.deployment_eu_created.outputs.depid}}
 
 
-  jira-versions:
+  set-jira-versions:
     uses: pontusihr2/pontusihr2/.github/workflows/jira-version.yml@main
     with:
       jira_project_id: 12505
