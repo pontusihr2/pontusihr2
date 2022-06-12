@@ -1,0 +1,108 @@
+name: set Jira version with tags
+
+on:
+  workflow_call:
+    inputs:
+      jira_project_id:
+        required: true
+        type: number
+      jira_project_key:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+    secrets:
+      jira_id:
+        required: true
+      jira_secret:
+        required: true
+
+jobs:
+  get-git-info:
+    name: get information from git
+    runs-on: ubuntu-latest
+    outputs:
+      issues: ${{ steps.issues.outputs.ids }}
+      startDate: ${{ steps.latest-release.outputs.date}}
+      today: ${{ steps.date.outputs.date }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: get today's date
+        id: date
+        run: |
+          echo "::set-output name=date::$(date +'%Y-%m-%d')"
+      - name: get issues
+        id: issues
+        run: |
+          latest_tag=$(git describe --abbrev=0)
+          git log §latest_tag.. --format=%B > commitBodyLogFromBump.txt
+          issues=$(grep -i -o '\b${{inputs.jira_project_key}}-\w*' commitBodyLogFromBump.txt)
+          unique_list=($(echo "${issues[@]}" | sort -u ))
+          ids_list_format=$( IFS=' '; echo "${unique_list[*]}" )
+          echo $ids_list_format
+          echo "::set-output name=ids::$ids_list_format"
+      # - id: latest-release
+      #   name: get date for most recent commit since latest release
+      #   run: |
+      #     last_but_one_bump=$(git log -i --grep="Bump Version" --pretty=format:"%H" --skip 1 -1)
+      #     first_commit_after_bump=$(git log --reverse --ancestry-path $last_but_one_bump.. --format=%H | head -1)
+      #     echo "::set-output name=date::$(git show -s --date=short --pretty=format:"%ci" $first_commit_after_bump | cut -d' ' -f1)"
+          
+  set-jira-version:
+    name: set jira version
+    runs-on: ubuntu-latest
+    needs:
+     - get-git-info
+
+# The reason for the compressed flag to be used is that
+# jira doesn't return the response in json without it when using curl.
+    steps:
+        - name: create jira release version
+          run: |
+            touch jirares.json
+            curl -o jirares.json --compressed --request POST \
+            --url 'https://jira.digital.ingka.com/rest/api/2/version' \
+            --user '${{secrets.jira_id}}:${{secrets.jira_secret}}' \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "archived": false,
+              "startDate": "${{needs.get-git-info.outputs.startDate}}",
+              "releaseDate": "${{needs.get-git-info.outputs.today}}",
+              "name": "${{inputs.version}}",
+              "projectId": ${{inputs.jira_project_id}},
+              "released": false
+            }'
+        - name: Set release version to tickets
+          run: |
+            issues=(${{ needs.get-git-info.outputs.issues }})
+            for issue in ${issues[@]}; do
+              curl --compressed --request PUT \
+              --url "https://jira.digital.ingka.com/rest/api/2/issue/$issue" \
+              --user '${{secrets.jira_id}}:${{secrets.jira_secret}}' \
+              --header 'Accept: application/json' \
+              --header 'Content-Type: application/json' \
+              --data '{
+              "update": {
+                "fixVersions": [
+                  {"add": {"name": "${{inputs.version}}" }}
+                ]
+               }
+              }'
+            done
+        - name: release version
+          run: |
+            version_jira_id=$(jq -r .id jirares.json)
+            curl --compressed --request PUT \
+            --url "https://jira.digital.ingka.com/rest/api/2/version/$version_jira_id" \
+            --user '${{secrets.jira_id}}:${{secrets.jira_secret}}' \
+            --header 'Accept: application/json' \
+            --header 'Content-Type: application/json' \
+            --data '{
+              "released": true
+            }'
