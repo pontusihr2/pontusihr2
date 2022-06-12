@@ -1,0 +1,131 @@
+name: Production Deploy with tags
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+permissions:
+  contents: 'read'
+  id-token: 'write'
+
+env:
+  PROJECT_NUMBER: 549958222747
+  CI: 'true'
+  VERSION: ${{ github.ref }}
+
+jobs:
+  deploying-prepaidcard:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [11.0.x]
+    environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      # - id: auth-gcr
+      #   name: Authenticate to Google Cloud Repository
+      #   uses: 'google-github-actions/auth@v0.4.0'
+      #   with:
+      #     token_format: access_token
+      #     workload_identity_provider: projects/549958222747/locations/global/workloadIdentityPools/prepaid-prod-pool/providers/prepaid-prod-gcp-provider
+      #     service_account: prepaid-wip@ingka-salpay-ikeacards-prod.iam.gserviceaccount.com
+
+
+      # - name: Setup gcloud CLI
+      #   uses: google-github-actions/setup-gcloud@v0
+      #   with:
+      #     project_id: ${{ env.PROJECT_ID }}
+
+      # - id: gcloud
+      #   name: gcloud login
+      #   run: |-
+      #     echo "GOOGLE_APPLICATION_CREDENTIALS=${{ steps.auth.outputs.credentials_file_path }}" >> $GITHUB_ENV
+      #     echo "GOOGLE_CREDENTIALS=${{ steps.auth.outputs.credentials_file_path }}" >> $GITHUB_ENV
+      #     gcloud auth login --brief --cred-file="${{ env.GOOGLE_APPLICATION_CREDENTIALS }}"
+
+      # - name: Build package
+      #   run: mvn -B package -s settings.xml -DARTIFACTORY_USER_NAME=${{ secrets.ARTIFACTORY_USER_NAME }} -DARTIFACTORY_PASSWORD=${{ secrets.ARTIFACTORY_PASSWORD }}
+
+      # - name: Login to GCR docker registry
+      #   run: |-
+      #     echo ${{ steps.auth-gcr.outputs.access_token }} | docker login -u oauth2accesstoken --password-stdin https://eu.gcr.io
+
+      # - name: Build and push Docker Images
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     context: .
+      #     push: true
+      #     tags: | 
+      #       eu.gcr.io/${{ secrets.GCP_PROJECT_ID_PROD }}/prepaidcard:latest
+
+      # - name: Configure gcloud CLI
+      #   uses: google-github-actions/setup-gcloud@v0
+      #   with:
+      #     project_id: ${{ secrets.GCP_PROJECT_ID_PROD }}
+      # - run: gcloud components install beta      
+
+      # - id: auth-cloudrun
+      #   name: 'Authenticate to Deploy Cloud Run'
+      #   uses: 'google-github-actions/auth@v0.4.0'
+      #   with:
+      #     workload_identity_provider: projects/${{ env.PROJECT_NUMBER }}/locations/global/workloadIdentityPools/prepaid-prod-pool/providers/prepaid-prod-gcp-provider
+      #     service_account: prepaid-wip@ingka-salpay-ikeacards-prod.iam.gserviceaccount.com
+
+
+      # - name: Deploying image to Cloud Run
+      #   run: |
+      #     gcloud beta run deploy prepaidcard \
+      #     --image eu.gcr.io/${{ secrets.GCP_PROJECT_ID_PROD }}/prepaidcard:latest \
+      #     --quiet \
+      #     --platform managed \
+      #     --port 8095 \
+      #     --memory 2Gi \
+      #     --region europe-west4 \
+      #     --min-instances 3 \
+      #     --allow-unauthenticated
+
+      # - name: send conditional deployment success metrics
+      #   uses: ./.github/actions/deployment-metrics/
+      #   if: ${{ success() }}
+      #   with:
+      #     dm_token: ${{secrets.DM_TOKEN}}
+      #     name: PrepaidCardsBackend
+      #     version: ${{steps.repo.outputs.REF}}
+      #     statusPage: https://github.com/ingka-group-digital/prepaidcard
+      #     repositoryUrl: https://github.com/ingka-group-digital/prepaidcard
+      #     commitSha: ${{github.sha}}
+      #     environment: production
+      #     status: success
+      #     productName: PrepaidCardsBackend
+      #     capabilityName: SP
+      #     depid: ${{steps.deployment_created.outputs.depid}}
+
+      # - name: send conditional deployment cancelled metrics
+      #   uses: ./.github/actions/deployment-metrics/
+      #   if: ${{ cancelled() }}
+      #   with:
+      #     dm_token: ${{secrets.DM_TOKEN}}
+      #     name: PrepaidCardsBackend
+      #     version: ${{steps.repo.outputs.REF}}
+      #     statusPage: ""
+      #     repositoryUrl: https://github.com/ingka-group-digital/prepaidcard
+      #     commitSha: ${{github.sha}}
+      #     environment: production
+      #     status: cancelled
+      #     productName: PrepaidCardsBackend
+      #     capabilityName: SP
+      #     depid: ${{steps.deployment_eu_created.outputs.depid}}
+
+
+  jira-versions:
+    uses: pontusihr2/pontusihr2/.github/workflows/jira-version.yml@main
+    with:
+      jira_project_id: 12505
+      jira_project_key: SPPP
+      version: 1.0.0
+    secrets:
+      jira_id: ${{ secrets.JIRA_EMAIL }}
+      jira_secret: ${{ secrets.JIRA_SECRET }}
