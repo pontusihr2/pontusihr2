@@ -121,7 +121,7 @@ jobs:
 
 
   jira-versions:
-    uses: pontusihr2/pontusihr2/.github/workflows/jira-version.yml@main
+    uses: pontusihr2/.github/workflows/jira-version.yml@main
     with:
       jira_project_id: 12505
       jira_project_key: SPPP
