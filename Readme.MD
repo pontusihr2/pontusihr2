@@ -1,3 +1,3 @@
 New local repo!
 
-Test commit 6
+Test commit7
